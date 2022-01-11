@@ -1,0 +1,114 @@
+﻿@page "/fetchdata"
+@using MyMeteo.Shared
+
+@*@inject HttpClient Http <== To remove *@
+
+@* To Add => *@
+@using SoloX.TableModel
+@using SoloX.TableModel.Impl
+@inject ITableDataRepository TableDataRepository
+
+<PageTitle>Weather forecast</PageTitle>
+
+<h1>Weather forecast</h1>
+
+<p>This component demonstrates fetching data from the server.</p>
+
+<EditForm Model="@this" OnValidSubmit="@LoadData">
+    <InputText id="name" @bind-Value="name" />
+
+    <InputSelect id="order"  @bind-Value="order">
+        <option>Ascending</option>
+        <option>Descending</option>
+        <option>None</option>
+    </InputSelect>
+
+    <button type="submit">Submit</button>
+</EditForm>
+
+@if (forecastCount == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Temp. (C)</th>
+                <th>Temp. (F)</th>
+                <th>Summary</th>
+            </tr>
+        </thead>
+        <tbody>
+            @*@foreach (var forecast in forecasts) <== To remove
+            {                                      <== To remove *@
+
+            <Virtualize ItemsProvider="@GetItems" OverscanCount="50" Context="forecast"> @* <== To Add *@
+                <tr>
+                    <td>@forecast.Date.ToShortDateString()</td>
+                    <td>@forecast.TemperatureC</td>
+                    <td>@forecast.TemperatureF</td>
+                    <td>@forecast.Summary</td>
+                </tr>
+            </Virtualize> @* <== To Add *@
+
+            @*} <== To remove *@
+        </tbody>
+    </table>
+}
+
+@code {
+    // private WeatherForecast[]? forecasts; <== To remove
+    private ITableData<WeatherForecast> forecasts; // <== To add
+    private int? forecastCount; // <== To add
+
+    protected override async Task OnInitializedAsync()
+    {
+        // forecasts = await Http.GetFromJsonAsync<WeatherForecast[]>("WeatherForecast"); <== To remove
+
+        forecasts = await TableDataRepository.GetTableDataAsync<WeatherForecast>();
+
+        await LoadData();
+    }
+
+    private async ValueTask<ItemsProviderResult<WeatherForecast>> GetItems(ItemsProviderRequest request)
+    {
+        // Load requested data from server with sorting and filter definition.
+        var forecastData = await forecasts.GetDataPageAsync(tableSorting, tableFilter, request.StartIndex, request.Count);
+
+        return new ItemsProviderResult<WeatherForecast>(forecastData, forecastCount.Value);
+    }
+
+    private string name;
+    private string order = "None";
+    private ITableFilter<WeatherForecast> tableFilter;
+    private ITableSorting<WeatherForecast> tableSorting;
+
+    private async Task LoadData()
+    {
+        // reset forecastCount to force the HTML view refresh.
+        forecastCount = null;
+
+        // Create a new tableFilter instance.
+        tableFilter = new TableFilter<WeatherForecast>();
+        // Create a new tableFilter instance.
+        tableSorting = new TableSorting<WeatherForecast>();
+
+        // Setup the filter on the column Summary to contains name if not empty.
+        if (!string.IsNullOrEmpty(this.name))
+        {
+            tableFilter.Register(wf => wf.Summary, v => v.ToLower().Contains(this.name.ToLower()));
+        }
+
+        // Setup the order on the column TemperatureC if defined.
+        if (order != "None")
+        {
+            tableSorting.Register(wf => wf.TemperatureC, order == "Ascending" ? SortingOrder.Ascending : SortingOrder.Descending);
+        }
+
+        // Finally update forecastCount with the resulting filtered data count.
+        forecastCount = await forecasts.GetDataCountAsync(tableFilter);
+    }
+}
